@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пятнашки </title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 300px;
+            margin-bottom: 15px;
+            font-size: 18px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            width: 300px;
+            height: 300px;
+            background-color: #333;
+            padding: 5px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .tile {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
+            position: relative;
+            overflow: hidden;
+        }
+        .tile::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="rgba(255,255,255,0.1)"/><path d="M0 0 L100 100 M0 100 L100 0" stroke="rgba(255,255,255,0.2)" stroke-width="1"/></svg>');
+            opacity: 0.6;
+        }
+        .tile:hover {
+            transform: scale(0.97);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+        }
+        .tile.empty {
+            background-color: transparent !important;
+            cursor: default;
+        }
+        .tile.empty::before {
+            display: none;
+        }
+        .tile.empty:hover {
+            transform: none;
+            box-shadow: none;
+        }
+        button {
+            margin-top: 20px;
+            padding: 12px 25px;
+            background: linear-gradient(to bottom, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 3px rgba(0,0,0,0.2);
+        }
+        .win-message {
+            margin-top: 20px;
+            font-size: 24px;
+            color: #27ae60;
+            font-weight: bold;
+            height: 30px;
+            text-align: center;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Пятнашки </h1>
+    <div class="game-info">
+        <div>Ходов: <span id="moves">0</span></div>
+        <div>Время: <span id="timer">00:00</span></div>
+    </div>
+    <div class="game-board" id="board"></div>
+    <div class="win-message" id="winMessage"></div>
+    <button id="restart">Новая игра</button>
+
+    <script>
+        // Игровые переменные
+        const size = 4;
+        let board = [];
+        let tileColors = [];
+        let emptyPos = { row: size-1, col: size-1 };
+        let moves = 0;
+        let seconds = 0;
+        let timerInterval;
+        let isGameStarted = false;
+
+        // DOM элементы
+        const boardElement = document.getElementById('board');
+        const movesElement = document.getElementById('moves');
+        const timerElement = document.getElementById('timer');
+        const restartButton = document.getElementById('restart');
+        const winMessageElement = document.getElementById('winMessage');
+
+        // Генерация случайного цвета с текстурой
+        function getRandomColor() {
+            const hue = Math.floor(Math.random() * 360);
+            const saturation = 70 + Math.floor(Math.random() * 30);
+            const lightness = 40 + Math.floor(Math.random() * 30);
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        // Инициализация игры
+        function initGame() {
+            // Создаем упорядоченный массив чисел
+            let numbers = [];
+            for (let i = 1; i < size*size; i++) {
+                numbers.push(i);
+            }
+            
+            // Перемешиваем числа
+            do {
+                shuffleArray(numbers);
+            } while (!isSolvable(numbers));
+            
+            // Добавляем пустую плитку
+            numbers.push(null);
+            
+            // Создаем игровое поле с новыми цветами
+            board = [];
+            tileColors = [];
+            for (let i = 0; i < size; i++) {
+                board[i] = [];
+                tileColors[i] = [];
+                for (let j = 0; j < size; j++) {
+                    board[i][j] = numbers[i*size + j];
+                    tileColors[i][j] = numbers[i*size + j] ? getRandomColor() : null;
+                }
+            }
+            
+            // Сбрасываем состояние игры
+            emptyPos = { row: size-1, col: size-1 };
+            moves = 0;
+            seconds = 0;
+            movesElement.textContent = '0';
+            timerElement.textContent = '00:00';
+            winMessageElement.textContent = '';
+            isGameStarted = false;
+            
+            // Отрисовываем поле
+            renderBoard();
+        }
+
+        // Перемешивание массива
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Проверка на решаемость
+        function isSolvable(numbers) {
+            let inversions = 0;
+            for (let i = 0; i < numbers.length; i++) {
+                for (let j = i + 1; j < numbers.length; j++) {
+                    if (numbers[i] && numbers[j] && numbers[i] > numbers[j]) inversions++;
+                }
+            }
+            
+            const emptyRowFromBottom = size - Math.floor((size * size - 1) / size);
+            return (emptyRowFromBottom % 2 === 0) === (inversions % 2 !== 0);
+        }
+
+        // Отрисовка игрового поля
+        function renderBoard() {
+            boardElement.innerHTML = '';
+            
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const value = board[i][j];
+                    const tile = document.createElement('div');
+                    tile.className = value ? 'tile' : 'tile empty';
+                    
+                    if (value) {
+                        tile.textContent = value;
+                        tile.style.backgroundColor = tileColors[i][j];
+                        tile.addEventListener('click', () => handleTileClick(i, j));
+                    }
+                    
+                    boardElement.appendChild(tile);
+                }
+            }
+        }
+
+        // Обработка клика по плитке
+        function handleTileClick(row, col) {
+            if (!isGameStarted) {
+                startTimer();
+                isGameStarted = true;
+            }
+            
+            if (isAdjacent(row, col, emptyPos.row, emptyPos.col)) {
+                // Меняем местами плитку и пустую клетку
+                [board[row][col], board[emptyPos.row][emptyPos.col]] = 
+                    [board[emptyPos.row][emptyPos.col], board[row][col]];
+                
+                // Меняем местами цвета
+                [tileColors[row][col], tileColors[emptyPos.row][emptyPos.col]] = 
+                    [tileColors[emptyPos.row][emptyPos.col], tileColors[row][col]];
+                
+                emptyPos = { row, col };
+                moves++;
+                movesElement.textContent = moves;
+                renderBoard();
+                
+                if (checkWin()) {
+                    clearInterval(timerInterval);
+                    winMessageElement.textContent = `Победа! Ходов: ${moves}, Время: ${formatTime(seconds)}`;
+                }
+            }
+        }
+
+        // Проверка соседства клеток
+        function isAdjacent(row1, col1, row2, col2) {
+            return (Math.abs(row1 - row2) === 1 && col1 === col2) || 
+                   (Math.abs(col1 - col2) === 1 && row1 === row2);
+        }
+
+        // Проверка на победу
+        function checkWin() {
+            let expectedValue = 1;
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    if (i === size-1 && j === size-1) {
+                        if (board[i][j] !== null) return false;
+                    } else {
+                        if (board[i][j] !== expectedValue++) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // Форматирование времени
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Запуск таймера
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                seconds++;
+                timerElement.textContent = formatTime(seconds);
+            }, 1000);
+        }
+
+        // Кнопка "Новая игра"
+        restartButton.addEventListener('click', initGame);
+
+        // Инициализация игры
+        initGame();
+    </script>
+</body>
+</html>
